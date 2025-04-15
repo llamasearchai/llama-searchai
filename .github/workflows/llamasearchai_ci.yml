@@ -1,0 +1,79 @@
+name: LlamaSearchAI CI
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'llamasearchai-pkg/**'
+      - '.github/workflows/llamasearchai_ci.yml'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'llamasearchai-pkg/**'
+      - '.github/workflows/llamasearchai_ci.yml'
+  workflow_dispatch: # Allow manual triggering
+
+permissions:
+  contents: read # Default permission, needed for checkout
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Test on relevant OSes and Python versions
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.8", "3.9", "3.10", "3.11"]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      working-directory: ./llamasearchai-pkg # Specify working directory
+      run: |
+        python -m pip install --upgrade pip
+        # Install package with dev dependencies
+        # Note: This assumes other local llama-* packages are NOT needed for basic CI tests yet
+        # If they are, they'd need to be built/installed first or mocked.
+        pip install -e '.[dev]'
+
+    - name: Lint with Ruff
+      working-directory: ./llamasearchai-pkg
+      run: |
+        ruff check .
+
+    - name: Format with Black
+      working-directory: ./llamasearchai-pkg
+      run: |
+        black --check .
+
+    - name: Sort imports with isort
+      working-directory: ./llamasearchai-pkg
+      run: |
+        isort --check-only .
+
+    - name: Type check with MyPy
+      working-directory: ./llamasearchai-pkg
+      run: |
+        mypy src/
+
+    - name: Run tests with Pytest
+      working-directory: ./llamasearchai-pkg
+      run: |
+        pytest --cov=src --cov-report=xml
+
+    - name: Upload coverage reports to Codecov
+      uses: codecov/codecov-action@v4 # Use v4
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }} # Store Codecov token in GitHub secrets
+        slug: ${{ github.repository }} # Automatically gets owner/repo
+        fail_ci_if_error: false # Don't fail CI if upload fails
+        working-directory: ./llamasearchai-pkg # Specify working directory for coverage file
+        verbose: true 
